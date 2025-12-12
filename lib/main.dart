@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import 'features/weather/presentation/weather_page.dart';
+import 'features/news/presentation/news_page.dart';
 
 void main() {
-  runApp(const WeatherNewsApp());
+  runApp(const ProviderScope(child: WeatherNewsApp()));
 }
 
 class WeatherNewsApp extends StatelessWidget {
@@ -29,10 +33,7 @@ class _MainPageState extends State<MainPage> {
 
   @override
   Widget build(BuildContext context) {
-    final pages = [
-      const Center(child: Text('Weather screen (поки заглушка)')),
-      const Center(child: Text('News screen (поки заглушка)')),
-    ];
+    final pages = const [WeatherPage(), NewsPage()];
 
     return Scaffold(
       appBar: AppBar(title: const Text('Weather & News App')),
