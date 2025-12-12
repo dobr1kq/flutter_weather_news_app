@@ -42,15 +42,17 @@ class _MainPageState extends State<MainPage> {
   Widget build(BuildContext context) {
     final pages = const [WeatherPage(), NewsPage()];
 
+    final titles = ['Погода', 'Новини'];
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Weather & News App')),
+      appBar: AppBar(title: Text(titles[_index])),
       body: pages[_index],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _index,
         onTap: (i) => setState(() => _index = i),
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.cloud), label: 'Weather'),
-          BottomNavigationBarItem(icon: Icon(Icons.article), label: 'News'),
+          BottomNavigationBarItem(icon: Icon(Icons.cloud), label: 'Погода'),
+          BottomNavigationBarItem(icon: Icon(Icons.article), label: 'Новини'),
         ],
       ),
     );
