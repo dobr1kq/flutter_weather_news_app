@@ -19,7 +19,7 @@ Future<void> initDependencies() async {
   final sharedPrefs = await SharedPreferences.getInstance();
   sl.registerSingleton<SharedPreferences>(sharedPrefs);
 
-  // Local storage services
+  // Local storage
   sl.registerLazySingleton<WeatherLocalStorage>(
     () => WeatherLocalStorage(sl<SharedPreferences>()),
   );
@@ -39,6 +39,7 @@ Future<void> initDependencies() async {
   sl.registerLazySingleton<WeatherRemoteDataSource>(
     () => WeatherRemoteDataSourceImpl(sl<Dio>()),
   );
+
   sl.registerLazySingleton<WeatherRepository>(
     () => WeatherRepositoryImpl(sl<WeatherRemoteDataSource>()),
   );
@@ -47,6 +48,7 @@ Future<void> initDependencies() async {
   sl.registerLazySingleton<NewsRemoteDataSource>(
     () => NewsRemoteDataSourceImpl(sl<Dio>()),
   );
+
   sl.registerLazySingleton<NewsRepository>(
     () => NewsRepositoryImpl(sl<NewsRemoteDataSource>()),
   );

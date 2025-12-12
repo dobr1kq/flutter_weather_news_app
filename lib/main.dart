@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'core/di/service_locator.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
+import 'core/di/service_locator.dart';
 import 'features/weather/presentation/weather_page.dart';
 import 'features/news/presentation/news_page.dart';
 
@@ -20,9 +20,40 @@ class WeatherNewsApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final baseTheme = ThemeData(
+      useMaterial3: true,
+      colorSchemeSeed: Colors.blue,
+    );
+
     return MaterialApp(
       title: 'Weather & News',
-      theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.blue),
+      debugShowCheckedModeBanner: false,
+      themeMode: ThemeMode.system,
+      theme: baseTheme.copyWith(
+        cardTheme: CardTheme(
+          elevation: 4,
+          margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      ),
+      darkTheme: ThemeData.dark(useMaterial3: true).copyWith(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.blue,
+          brightness: Brightness.dark,
+        ),
+        cardTheme: CardTheme(
+          elevation: 2,
+          margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+      ),
       home: const MainPage(),
     );
   }

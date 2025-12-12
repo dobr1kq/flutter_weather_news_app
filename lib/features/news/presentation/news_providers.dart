@@ -9,11 +9,19 @@ final _newsRepositoryProvider = Provider<NewsRepository>((ref) {
   return sl<NewsRepository>();
 });
 
+// null = усі категорії
+final selectedNewsCategoryProvider = StateProvider<String?>((ref) => null);
+
 final topHeadlinesProvider = FutureProvider<List<NewsArticleEntity>>((
   ref,
 ) async {
   final repo = ref.watch(_newsRepositoryProvider);
-  final countryCode = dotenv.env['DEFAULT_COUNTRY_CODE'] ?? 'ua';
+  final countryCode = dotenv.env['DEFAULT_COUNTRY_CODE'] ?? 'us';
 
-  return await repo.getTopHeadlines(countryCode: countryCode);
+  final category = ref.watch(selectedNewsCategoryProvider);
+
+  return await repo.getTopHeadlines(
+    countryCode: countryCode,
+    category: category,
+  );
 });

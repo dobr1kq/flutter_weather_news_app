@@ -19,16 +19,28 @@ class WeatherRemoteDataSourceImpl implements WeatherRemoteDataSource {
       throw Exception('OPEN_WEATHER_API_KEY is not set in .env');
     }
 
-    final response = await dio.get(
-      'https://api.openweathermap.org/data/2.5/weather',
-      queryParameters: {
-        'q': city,
-        'appid': apiKey,
-        'units': 'metric',
-        'lang': 'ua',
-      },
-    );
+    try {
+      final response = await dio.get(
+        'https://api.openweathermap.org/data/2.5/weather',
+        queryParameters: {
+          'q': city,
+          'appid': apiKey,
+          'units': 'metric',
+          'lang': 'ua',
+        },
+      );
 
-    return WeatherModel.fromJson(response.data as Map<String, dynamic>);
+      return WeatherModel.fromJson(response.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      // Якщо місто не знайдено
+      if (e.response?.statusCode == 404) {
+        throw Exception(
+          'Місто "$city" не знайдено. Перевірте правильність назви.',
+        );
+      }
+
+      // Інші помилки – більш загальне повідомлення
+      throw Exception('Не вдалося завантажити погоду. Спробуйте пізніше.');
+    }
   }
 }
