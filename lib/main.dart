@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
+import 'core/notifications/notification_service.dart';
 import 'core/di/service_locator.dart';
 import 'features/weather/presentation/weather_page.dart';
 import 'features/news/presentation/news_page.dart';
@@ -11,6 +12,7 @@ Future<void> main() async {
 
   await dotenv.load(fileName: ".env");
   await initDependencies();
+  await NotificationService.instance.init();
 
   runApp(const ProviderScope(child: WeatherNewsApp()));
 }

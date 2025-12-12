@@ -4,6 +4,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:dio/dio.dart';
 
+import '../../../core/notifications/notification_service.dart';
 import '../../../core/config/weather_local_storage.dart';
 import '../../../core/di/service_locator.dart';
 import 'weather_providers.dart';
@@ -19,6 +20,58 @@ class _WeatherPageState extends ConsumerState<WeatherPage> {
   late TextEditingController _controller;
   late String _currentCity;
   late final WeatherLocalStorage _localStorage;
+
+  String? _lastAlertSignature;
+
+  bool _isAlertCondition(double temp, String description) {
+    final desc = description.toLowerCase();
+
+    // Можеш підкоригувати пороги під себе
+    if (temp <= 0) return true; // мороз
+    if (temp >= 30) return true; // спека
+    if (desc.contains('дощ') || desc.contains('rain')) return true;
+    if (desc.contains('гроза') ||
+        desc.contains('storm') ||
+        desc.contains('thunder')) {
+      return true;
+    }
+
+    return false;
+  }
+
+  Future<void> _maybeShowAlert({
+    required String city,
+    required double temp,
+    required String description,
+  }) async {
+    final signature =
+        '${city.toLowerCase()}-${temp.round()}-${description.toLowerCase()}';
+
+    // щоб не спамити — якщо вже показували для такого стану
+    if (_lastAlertSignature == signature) return;
+
+    if (_isAlertCondition(temp, description)) {
+      _lastAlertSignature = signature;
+
+      String title = 'Погодні попередження для $city';
+      String body;
+
+      if (temp <= 0) {
+        body =
+            'На вулиці мороз (${temp.toStringAsFixed(1)} °C). Одягайся тепліше!';
+      } else if (temp >= 30) {
+        body =
+            'Сильна спека (${temp.toStringAsFixed(1)} °C). Не забудь про воду!';
+      } else {
+        body = 'Увага: $description. Перевір погоду перед виходом.';
+      }
+
+      await NotificationService.instance.showWeatherAlert(
+        title: title,
+        body: body,
+      );
+    }
+  }
 
   @override
   void initState() {
@@ -274,10 +327,14 @@ class _WeatherPageState extends ConsumerState<WeatherPage> {
             Expanded(
               child: weatherAsync.when(
                 data: (weather) {
+                  _maybeShowAlert(
+                    city: weather.cityName,
+                    temp: weather.temperature,
+                    description: weather.description,
+                  );
                   final forecastAsync = ref.watch(
                     forecastByCityProvider(_currentCity),
                   );
-
                   return SingleChildScrollView(
                     padding: const EdgeInsets.only(bottom: 16),
                     child: Column(
