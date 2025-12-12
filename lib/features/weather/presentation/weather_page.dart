@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:dio/dio.dart';
 
 import '../../../core/config/weather_local_storage.dart';
 import '../../../core/di/service_locator.dart';
@@ -38,6 +40,7 @@ class _WeatherPageState extends ConsumerState<WeatherPage> {
         _controller.text = savedCity;
       });
       ref.refresh(weatherByCityProvider(_currentCity));
+      ref.refresh(forecastByCityProvider(_currentCity));
     }
   }
 
@@ -56,11 +59,97 @@ class _WeatherPageState extends ConsumerState<WeatherPage> {
     });
 
     await _localStorage.saveLastCity(input);
+
     ref.refresh(weatherByCityProvider(_currentCity));
+    ref.refresh(forecastByCityProvider(_currentCity));
   }
 
   Future<void> _refreshWeather() async {
     ref.refresh(weatherByCityProvider(_currentCity));
+    ref.refresh(forecastByCityProvider(_currentCity));
+  }
+
+  Future<void> _selectSavedCity(String city) async {
+    setState(() {
+      _currentCity = city;
+      _controller.text = city;
+    });
+
+    await _localStorage.saveLastCity(city);
+
+    ref.refresh(weatherByCityProvider(_currentCity));
+    ref.refresh(forecastByCityProvider(_currentCity));
+  }
+
+  void _showSnack(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// Геолокація + reverse geocoding через OpenWeatherMap
+  Future<void> _useCurrentLocation() async {
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        _showSnack('Служба геолокації вимкнена. Увімкніть Location Services.');
+        return;
+      }
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        _showSnack('Немає доступу до геолокації.');
+        return;
+      }
+
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.low,
+      );
+
+      final apiKey = dotenv.env['OPEN_WEATHER_API_KEY'];
+      if (apiKey == null || apiKey.isEmpty) {
+        _showSnack('OPEN_WEATHER_API_KEY не налаштовано в .env');
+        return;
+      }
+
+      final dio = sl<Dio>();
+      final response = await dio.get(
+        'http://api.openweathermap.org/geo/1.0/reverse',
+        queryParameters: {
+          'lat': position.latitude,
+          'lon': position.longitude,
+          'limit': 1,
+          'appid': apiKey,
+        },
+      );
+
+      final data = response.data as List<dynamic>;
+      if (data.isEmpty) {
+        _showSnack('Не вдалося визначити місто за координатами.');
+        return;
+      }
+
+      final city =
+          (data.first as Map<String, dynamic>)['name'] as String? ?? 'Unknown';
+
+      setState(() {
+        _currentCity = city;
+        _controller.text = city;
+      });
+
+      await _localStorage.saveLastCity(city);
+
+      ref.refresh(weatherByCityProvider(_currentCity));
+      ref.refresh(forecastByCityProvider(_currentCity));
+
+      _showSnack('Місто визначено: $city');
+    } catch (e) {
+      _showSnack('Помилка геолокації: $e');
+    }
   }
 
   List<Color> _backgroundGradient(double temp) {
@@ -82,8 +171,8 @@ class _WeatherPageState extends ConsumerState<WeatherPage> {
   @override
   Widget build(BuildContext context) {
     final weatherAsync = ref.watch(weatherByCityProvider(_currentCity));
+    final savedCities = ref.watch(savedCitiesProvider);
 
-    // Якщо є дані — малюємо градієнт, інакше фон залишаємо стандартний
     final gradient = weatherAsync.whenOrNull(
       data: (weather) => _backgroundGradient(weather.temperature),
     );
@@ -102,9 +191,9 @@ class _WeatherPageState extends ConsumerState<WeatherPage> {
       child: SafeArea(
         child: Column(
           children: [
-            // 🔹 Рядок пошуку — завжди зверху
+            // 🔹 Рядок пошуку + my location + bookmark + search
             Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
               child: Row(
                 children: [
                   Expanded(
@@ -119,6 +208,21 @@ class _WeatherPageState extends ConsumerState<WeatherPage> {
                     ),
                   ),
                   const SizedBox(width: 8),
+                  IconButton(
+                    tooltip: 'Моя локація',
+                    onPressed: _useCurrentLocation,
+                    icon: const Icon(Icons.my_location),
+                  ),
+                  IconButton(
+                    tooltip: 'Додати в обрані',
+                    onPressed: () {
+                      ref
+                          .read(savedCitiesProvider.notifier)
+                          .addCity(_controller.text);
+                    },
+                    icon: const Icon(Icons.bookmark_add_outlined),
+                  ),
+                  const SizedBox(width: 4),
                   ElevatedButton(
                     onPressed: _search,
                     style: ElevatedButton.styleFrom(
@@ -136,62 +240,219 @@ class _WeatherPageState extends ConsumerState<WeatherPage> {
               ),
             ),
 
-            // 🔹 Нижче — або картка, або лоадер, або помилка
+            // 🔹 Рядок збережених міст (чіпи)
+            if (savedCities.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
+                child: SizedBox(
+                  height: 40,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: savedCities.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (context, index) {
+                      final city = savedCities[index];
+                      final bool isSelected =
+                          city.toLowerCase() == _currentCity.toLowerCase();
+
+                      return InputChip(
+                        label: Text(city),
+                        selected: isSelected,
+                        onPressed: () => _selectSavedCity(city),
+                        onDeleted: () {
+                          ref
+                              .read(savedCitiesProvider.notifier)
+                              .removeCity(city);
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ),
+
+            // 🔹 Основний контент: погода + прогноз (scrollable)
             Expanded(
               child: weatherAsync.when(
                 data: (weather) {
-                  return Center(
-                    child: Card(
-                      elevation: 8,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(24),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              weather.cityName,
-                              style: Theme.of(context).textTheme.headlineMedium
-                                  ?.copyWith(fontWeight: FontWeight.bold),
+                  final forecastAsync = ref.watch(
+                    forecastByCityProvider(_currentCity),
+                  );
+
+                  return SingleChildScrollView(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // картка поточної погоди
+                        Center(
+                          child: Card(
+                            elevation: 8,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(24),
                             ),
-                            const SizedBox(height: 8),
-                            Text(
-                              weather.description,
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                            const SizedBox(height: 16),
-                            SizedBox(
-                              height: 120,
-                              child: Image.network(
-                                _iconUrl(weather.iconCode),
-                                errorBuilder:
-                                    (_, __, ___) =>
-                                        const Icon(Icons.cloud, size: 80),
+                            child: Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    weather.cityName,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .headlineMedium
+                                        ?.copyWith(fontWeight: FontWeight.bold),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    weather.description,
+                                    style:
+                                        Theme.of(context).textTheme.titleMedium,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  SizedBox(
+                                    height: 120,
+                                    child: Image.network(
+                                      _iconUrl(weather.iconCode),
+                                      errorBuilder:
+                                          (_, __, ___) =>
+                                              const Icon(Icons.cloud, size: 80),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    '${weather.temperature.toStringAsFixed(1)} °C',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .displaySmall
+                                        ?.copyWith(fontWeight: FontWeight.w600),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Відчувається як: ${weather.feelsLike.toStringAsFixed(1)} °C',
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text('Вологість: ${weather.humidity}%'),
+                                  const SizedBox(height: 16),
+                                  ElevatedButton.icon(
+                                    onPressed: _refreshWeather,
+                                    icon: const Icon(Icons.refresh),
+                                    label: const Text('Оновити погоду'),
+                                  ),
+                                ],
                               ),
                             ),
-                            const SizedBox(height: 16),
-                            Text(
-                              '${weather.temperature.toStringAsFixed(1)} °C',
-                              style: Theme.of(context).textTheme.displaySmall
-                                  ?.copyWith(fontWeight: FontWeight.w600),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Відчувається як: ${weather.feelsLike.toStringAsFixed(1)} °C',
-                            ),
-                            const SizedBox(height: 4),
-                            Text('Вологість: ${weather.humidity}%'),
-                            const SizedBox(height: 16),
-                            ElevatedButton.icon(
-                              onPressed: _refreshWeather,
-                              icon: const Icon(Icons.refresh),
-                              label: const Text('Оновити погоду'),
-                            ),
-                          ],
+                          ),
                         ),
-                      ),
+
+                        const SizedBox(height: 12),
+
+                        // прогноз на 5 днів
+                        SizedBox(
+                          height: 150,
+                          child: forecastAsync.when(
+                            data: (days) {
+                              if (days.isEmpty) {
+                                return const Center(
+                                  child: Text('Прогноз недоступний'),
+                                );
+                              }
+
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Padding(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                    ),
+                                    child: Text(
+                                      'Прогноз на 5 днів',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Expanded(
+                                    child: ListView.separated(
+                                      scrollDirection: Axis.horizontal,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 16,
+                                      ),
+                                      itemCount: days.length,
+                                      separatorBuilder:
+                                          (_, __) => const SizedBox(width: 8),
+                                      itemBuilder: (context, index) {
+                                        final day = days[index];
+                                        final date =
+                                            '${day.date.day.toString().padLeft(2, '0')}.'
+                                            '${day.date.month.toString().padLeft(2, '0')}';
+
+                                        return Container(
+                                          width: 110,
+                                          decoration: BoxDecoration(
+                                            color: Colors.black.withOpacity(
+                                              0.06,
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              16,
+                                            ),
+                                          ),
+                                          padding: const EdgeInsets.all(8),
+                                          child: Column(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceAround,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.center,
+                                            children: [
+                                              Text(
+                                                date,
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                              SizedBox(
+                                                height: 40,
+                                                child: Image.network(
+                                                  _iconUrl(day.iconCode),
+                                                  errorBuilder:
+                                                      (_, __, ___) =>
+                                                          const Icon(
+                                                            Icons.cloud,
+                                                          ),
+                                                ),
+                                              ),
+                                              Text(
+                                                '${day.minTemp.toStringAsFixed(0)}° / ${day.maxTemp.toStringAsFixed(0)}°',
+                                              ),
+                                              Text(
+                                                day.description,
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                                textAlign: TextAlign.center,
+                                                style: const TextStyle(
+                                                  fontSize: 11,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                            loading:
+                                () => const Center(
+                                  child: CircularProgressIndicator(),
+                                ),
+                            error:
+                                (e, st) => const Center(
+                                  child: Text('Не вдалося завантажити прогноз'),
+                                ),
+                          ),
+                        ),
+                      ],
                     ),
                   );
                 },
