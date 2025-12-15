@@ -10,7 +10,9 @@ import 'features/news/presentation/news_page.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await dotenv.load(fileName: ".env");
+  try {
+    await dotenv.load(fileName: ".env");
+  } catch (_) {}
   await initDependencies();
   await NotificationService.instance.init();
 

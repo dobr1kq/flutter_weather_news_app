@@ -13,20 +13,18 @@ import '../../features/news/domain/repositories/news_repository.dart';
 
 import '../config/weather_local_storage.dart';
 import '../config/saved_cities_storage.dart';
+import '../config/i_weather_local_storage.dart';
 
 final sl = GetIt.instance;
 
 Future<void> initDependencies() async {
-  // SharedPreferences
   final sharedPrefs = await SharedPreferences.getInstance();
   sl.registerSingleton<SharedPreferences>(sharedPrefs);
 
-  // Hive (для user preferences)
   await Hive.initFlutter();
   final prefsBox = await Hive.openBox('preferences');
   sl.registerSingleton<Box>(prefsBox, instanceName: 'preferences');
 
-  // Local storage services
   sl.registerLazySingleton<WeatherLocalStorage>(
     () => WeatherLocalStorage(sl<SharedPreferences>()),
   );
@@ -35,7 +33,6 @@ Future<void> initDependencies() async {
     () => SavedCitiesStorage(sl<Box>(instanceName: 'preferences')),
   );
 
-  // Dio
   sl.registerLazySingleton<Dio>(() {
     final dio = Dio(
       BaseOptions(
@@ -46,7 +43,6 @@ Future<void> initDependencies() async {
     return dio;
   });
 
-  // Weather feature
   sl.registerLazySingleton<WeatherRemoteDataSource>(
     () => WeatherRemoteDataSourceImpl(sl<Dio>()),
   );
@@ -54,11 +50,14 @@ Future<void> initDependencies() async {
     () => WeatherRepositoryImpl(sl<WeatherRemoteDataSource>()),
   );
 
-  // News feature
   sl.registerLazySingleton<NewsRemoteDataSource>(
     () => NewsRemoteDataSourceImpl(sl<Dio>()),
   );
   sl.registerLazySingleton<NewsRepository>(
     () => NewsRepositoryImpl(sl<NewsRemoteDataSource>()),
+  );
+
+  sl.registerLazySingleton<IWeatherLocalStorage>(
+    () => WeatherLocalStorage(sharedPrefs),
   );
 }

@@ -25,7 +25,6 @@ class NewsPage extends ConsumerWidget {
 
     return Column(
       children: [
-        // Фільтр категорій
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
           child: Row(

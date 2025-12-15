@@ -4,6 +4,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:dio/dio.dart';
 
+import '../../../core/config/i_weather_local_storage.dart';
 import '../../../core/notifications/notification_service.dart';
 import '../../../core/config/weather_local_storage.dart';
 import '../../../core/di/service_locator.dart';
@@ -19,16 +20,15 @@ class WeatherPage extends ConsumerStatefulWidget {
 class _WeatherPageState extends ConsumerState<WeatherPage> {
   late TextEditingController _controller;
   late String _currentCity;
-  late final WeatherLocalStorage _localStorage;
+  late final IWeatherLocalStorage _localStorage;
 
   String? _lastAlertSignature;
 
   bool _isAlertCondition(double temp, String description) {
     final desc = description.toLowerCase();
 
-    // Можеш підкоригувати пороги під себе
-    if (temp <= 0) return true; // мороз
-    if (temp >= 30) return true; // спека
+    if (temp <= 0) return true;
+    if (temp >= 30) return true;
     if (desc.contains('дощ') || desc.contains('rain')) return true;
     if (desc.contains('гроза') ||
         desc.contains('storm') ||
@@ -47,7 +47,6 @@ class _WeatherPageState extends ConsumerState<WeatherPage> {
     final signature =
         '${city.toLowerCase()}-${temp.round()}-${description.toLowerCase()}';
 
-    // щоб не спамити — якщо вже показували для такого стану
     if (_lastAlertSignature == signature) return;
 
     if (_isAlertCondition(temp, description)) {
@@ -77,7 +76,7 @@ class _WeatherPageState extends ConsumerState<WeatherPage> {
   void initState() {
     super.initState();
 
-    _localStorage = sl<WeatherLocalStorage>();
+    _localStorage = sl<IWeatherLocalStorage>();
 
     _currentCity = dotenv.env['DEFAULT_CITY'] ?? 'Kyiv';
     _controller = TextEditingController(text: _currentCity);
@@ -140,7 +139,6 @@ class _WeatherPageState extends ConsumerState<WeatherPage> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  /// Геолокація + reverse geocoding через OpenWeatherMap
   Future<void> _useCurrentLocation() async {
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
@@ -244,7 +242,6 @@ class _WeatherPageState extends ConsumerState<WeatherPage> {
       child: SafeArea(
         child: Column(
           children: [
-            // 🔹 Рядок пошуку + my location + bookmark + search
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
               child: Row(
@@ -293,7 +290,6 @@ class _WeatherPageState extends ConsumerState<WeatherPage> {
               ),
             ),
 
-            // 🔹 Рядок збережених міст (чіпи)
             if (savedCities.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
@@ -323,7 +319,6 @@ class _WeatherPageState extends ConsumerState<WeatherPage> {
                 ),
               ),
 
-            // 🔹 Основний контент: погода + прогноз (scrollable)
             Expanded(
               child: weatherAsync.when(
                 data: (weather) {
@@ -340,7 +335,6 @@ class _WeatherPageState extends ConsumerState<WeatherPage> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // картка поточної погоди
                         Center(
                           child: Card(
                             elevation: 8,
@@ -403,7 +397,6 @@ class _WeatherPageState extends ConsumerState<WeatherPage> {
 
                         const SizedBox(height: 12),
 
-                        // прогноз на 5 днів
                         SizedBox(
                           height: 150,
                           child: forecastAsync.when(

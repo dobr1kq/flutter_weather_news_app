@@ -1,17 +1,16 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import 'i_weather_local_storage.dart';
 
-class WeatherLocalStorage {
-  static const _lastCityKey = 'last_city';
-
+class WeatherLocalStorage implements IWeatherLocalStorage {
   final SharedPreferences _prefs;
 
   WeatherLocalStorage(this._prefs);
 
-  String? getLastCity() {
-    return _prefs.getString(_lastCityKey);
-  }
+  @override
+  String? getLastCity() => _prefs.getString('last_city');
 
+  @override
   Future<void> saveLastCity(String city) async {
-    await _prefs.setString(_lastCityKey, city);
+    await _prefs.setString('last_city', city);
   }
 }
